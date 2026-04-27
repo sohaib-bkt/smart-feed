@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+sentence-transformers
+transformers
+datasets
+detoxify
+faiss-cpu
+firebase-admin
+python-dotenv
+pydantic
+scikit-learn
+pandas
+numpy
