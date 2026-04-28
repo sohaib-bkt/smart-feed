@@ -2,7 +2,7 @@ fastapi
 uvicorn[standard]
 sentence-transformers
 transformers
-datasets
+datasets==3.6.0
 detoxify
 faiss-cpu
 firebase-admin
