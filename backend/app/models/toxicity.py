@@ -47,7 +47,7 @@ def score_toxicity(text: str) -> dict:
 
 
 def is_toxic(text: str, threshold: float = 0.3) -> bool:
-    return bool(score_toxicity(text)["toxicity_score"] >= threshold)
+    return bool(score_toxicity(text)["toxicity_score"] > threshold)
 
 
 def _demo() -> None:
