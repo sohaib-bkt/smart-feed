@@ -1,4 +1,4 @@
-Smart Feed
+# Smart Feed
 
 Team sync after LFS history rewrite
 - Install Git LFS once: `git lfs install`
@@ -20,3 +20,5 @@ Toxicity module (Phase 1)
 	`python -m app.models.toxicity`
 - Run unit tests:
 	`pytest tests/test_toxicity.py -v`
+
+Firebase
