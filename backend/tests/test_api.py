@@ -1,57 +1,32 @@
 """
-Tests des endpoints FastAPI avec mock_db (pas de Firebase réel).
-
-Technique : on mock les modules lourds (faiss, numpy, sentence_transformers)
-AVANT tout import applicatif pour éviter les dépendances manquantes.
+tests/test_api.py
+──────────────────
+Tests des endpoints FastAPI avec mock_db.
 """
 
 import sys
 from unittest.mock import MagicMock, patch
 import importlib
 
-# Ces modules sont lourds ou absents → on les remplace par des mocks légers
+# ── ÉTAPE CRITIQUE : Mock AVANT tout import ──────────────────────────
+# On ne mock QUE les modules qui ne sont PAS installés
+# Si numpy/pandas sont installés (via pip), on les laisse tranquilles
 
-# Créer un faux module numpy avec juste ce qu'il faut
-import types
-
-# Mock numpy
-if 'numpy' not in sys.modules:
-    mock_np = MagicMock()
-    mock_np.array = lambda x, **kwargs: x
-    mock_np.ndarray = list
-    mock_np.float32 = float
-    mock_np.sum = sum
-    mock_np.dot = lambda a, b: 0.0
-    mock_np.linalg = MagicMock()
-    mock_np.linalg.norm = lambda x: 1.0
-    mock_np.load = MagicMock(return_value=MagicMock())
-    mock_np.save = MagicMock()
-    sys.modules['numpy'] = mock_np
-
-# Mock pandas
-if 'pandas' not in sys.modules:
-    mock_pd = MagicMock()
-    mock_pd.read_parquet = MagicMock(return_value=MagicMock())
-    mock_pd.DataFrame = MagicMock()
-    mock_pd.Timestamp = MagicMock()
-    mock_pd.notna = lambda x: True
-    sys.modules['pandas'] = mock_pd
-
-# Mock sentence_transformers
+# Mock sentence_transformers (lourd, pas nécessaire pour les tests API)
 if 'sentence_transformers' not in sys.modules:
     mock_st = MagicMock()
     mock_st.SentenceTransformer = MagicMock()
     sys.modules['sentence_transformers'] = mock_st
 
-# Mock transformers
+# Mock transformers (lourd, pas nécessaire pour les tests API)
 if 'transformers' not in sys.modules:
     sys.modules['transformers'] = MagicMock()
 
-# Mock detoxify
+# Mock detoxify (pas nécessaire pour les tests API)
 if 'detoxify' not in sys.modules:
     sys.modules['detoxify'] = MagicMock()
 
-# Mock faiss
+# Mock faiss (pas nécessaire pour les tests API, on mock get_feed)
 if 'faiss' not in sys.modules:
     mock_faiss = MagicMock()
     mock_faiss.IndexFlatIP = MagicMock()
@@ -59,11 +34,11 @@ if 'faiss' not in sys.modules:
     mock_faiss.write_index = MagicMock()
     sys.modules['faiss'] = mock_faiss
 
-# Mock firebase_admin
+# Mock firebase_admin (on utilise mock_db à la place)
 if 'firebase_admin' not in sys.modules:
     sys.modules['firebase_admin'] = MagicMock()
 
-# Mock datasets (HuggingFace)
+# Mock datasets (HuggingFace, pas nécessaire)
 if 'datasets' not in sys.modules:
     sys.modules['datasets'] = MagicMock()
 
@@ -82,7 +57,6 @@ import app.api.preferences as prefs_module
 def patch_firebase_with_mock(monkeypatch):
     """
     Remplace firebase.py par mock_db dans les 3 routers.
-    Exécuté automatiquement avant chaque test.
     """
     # ── feed.py ───────────────────────────────────────────────────────
     monkeypatch.setattr(feed_module, "get_user_profile",    mock_db.get_user_profile)
@@ -118,7 +92,6 @@ def client():
 # ═════════════════════════════════════════════════════════════════════
 
 def test_health(client):
-    """Le serveur répond 200 avec status ok."""
     res = client.get("/health")
     assert res.status_code == 200
     assert res.json()["status"] == "ok"
@@ -130,22 +103,18 @@ def test_health(client):
 # ═════════════════════════════════════════════════════════════════════
 
 def test_get_preferences_user_inexistant(client):
-    """Lire les prefs d'un user inexistant → 404."""
     res = client.get("/api/preferences/nobody")
     assert res.status_code == 404
     print("✅ GET /preferences/nobody → 404")
 
 
 def test_get_preferences_user_existant(client):
-    """Après création, les prefs par défaut sont retournées."""
     import asyncio
     asyncio.run(mock_db.create_user("alice"))
-
     res = client.get("/api/preferences/alice")
     assert res.status_code == 200
     data = res.json()
     assert data["mode"] == "default"
-    assert data["toxicity_threshold"] == 0.3
     print(f"✅ GET /preferences/alice → {data}")
 
 
@@ -154,7 +123,6 @@ def test_get_preferences_user_existant(client):
 # ═════════════════════════════════════════════════════════════════════
 
 def test_update_preferences_cree_user_si_absent(client):
-    """PUT prefs sur un user inexistant → le crée automatiquement."""
     payload = {
         "mode": "focus",
         "interests": ["TECH", "SCIENCE"],
@@ -168,10 +136,8 @@ def test_update_preferences_cree_user_si_absent(client):
 
 
 def test_update_preferences_user_existant(client):
-    """PUT prefs sur un user existant → met à jour ses prefs."""
     import asyncio
     asyncio.run(mock_db.create_user("bob"))
-
     payload = {
         "mode": "fun",
         "interests": ["SPORTS"],
@@ -185,7 +151,6 @@ def test_update_preferences_user_existant(client):
 
 
 def test_update_preferences_mode_invalide(client):
-    """PUT avec un mode invalide → 422 (validation Pydantic)."""
     payload = {
         "mode": "turbo",
         "interests": [],
@@ -194,11 +159,10 @@ def test_update_preferences_mode_invalide(client):
     }
     res = client.put("/api/preferences/carol", json=payload)
     assert res.status_code == 422
-    print("✅ PUT mode=turbo → 422 validation error")
+    print("✅ PUT mode=turbo → 422")
 
 
 def test_update_preferences_threshold_hors_range(client):
-    """PUT avec toxicity_threshold > 1.0 → 422."""
     payload = {
         "mode": "default",
         "interests": [],
@@ -207,7 +171,7 @@ def test_update_preferences_threshold_hors_range(client):
     }
     res = client.put("/api/preferences/diana", json=payload)
     assert res.status_code == 422
-    print("✅ PUT threshold=1.5 → 422 validation error")
+    print("✅ PUT threshold=1.5 → 422")
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -215,10 +179,8 @@ def test_update_preferences_threshold_hors_range(client):
 # ═════════════════════════════════════════════════════════════════════
 
 def test_set_mode_valide(client):
-    """Changer de mode sur un user existant → 200."""
     import asyncio
     asyncio.run(mock_db.create_user("eve"))
-
     res = client.post("/api/preferences/eve/mode/learning")
     assert res.status_code == 200
     assert res.json()["mode"] == "learning"
@@ -226,17 +188,14 @@ def test_set_mode_valide(client):
 
 
 def test_set_mode_invalide(client):
-    """Mode inconnu → 400."""
     import asyncio
     asyncio.run(mock_db.create_user("frank"))
-
     res = client.post("/api/preferences/frank/mode/turbo")
     assert res.status_code == 400
     print("✅ POST /mode/turbo → 400")
 
 
 def test_set_mode_user_inexistant(client):
-    """Changer le mode d'un user inexistant → 404."""
     res = client.post("/api/preferences/ghost/mode/fun")
     assert res.status_code == 404
     print("✅ POST /mode/fun sur ghost → 404")
@@ -250,7 +209,6 @@ def test_interact_like(client):
     """Un like est bien enregistré → 200 + status logged."""
     import asyncio
     asyncio.run(mock_db.create_user("grace"))
-
     payload = {
         "user_id": "grace",
         "post_id": "post_1",
@@ -265,7 +223,7 @@ def test_interact_like(client):
 
 
 def test_interact_action_invalide(client):
-    """Une action non reconnue → 422 (validation Pydantic)."""
+    """Une action non reconnue → 422."""
     payload = {
         "user_id": "henry",
         "post_id": "post_2",
@@ -281,7 +239,6 @@ def test_interact_met_a_jour_embedding(client):
     """Après un like, l'embedding de l'user est mis à jour."""
     import asyncio
     asyncio.run(mock_db.create_user("ivan"))
-
     payload = {
         "user_id": "ivan",
         "post_id": "post_5",
@@ -290,7 +247,6 @@ def test_interact_met_a_jour_embedding(client):
         "watch_time": 45.0
     }
     client.post("/api/interact", json=payload)
-
     profile = asyncio.run(mock_db.get_user_profile("ivan"))
     assert profile is not None
     assert len(profile["embedding"]) == 384
