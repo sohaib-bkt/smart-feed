@@ -8,6 +8,7 @@ faiss-cpu
 firebase-admin
 python-dotenv
 pydantic
+pydantic-settings
 scikit-learn
 pandas
 numpy
