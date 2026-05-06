@@ -41,3 +41,26 @@ def compute_user_embedding(interactions: list[dict]) -> list[float]:
     if norm > 0:
         user_emb = user_emb / norm
     return user_emb.tolist()
+
+def get_top_interests(interactions, n=5):
+    """
+    Détecte les catégories les plus fréquentes dans les interactions positives.
+    
+    Args:
+        interactions: Liste de dicts avec une clé "category" et "action"
+        n: Nombre de catégories à retourner
+    
+    Returns:
+        Liste des n catégories les plus fréquentes
+    """
+    from collections import Counter
+    
+    positive_actions = {"like", "watch_full", "watch_50", "comment", "share"}
+    
+    categories = [
+        i["category"] 
+        for i in interactions 
+        if i.get("action") in positive_actions and i.get("category")
+    ]
+    
+    return [cat for cat, _ in Counter(categories).most_common(n)]
