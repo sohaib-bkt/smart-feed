@@ -1,26 +1,78 @@
 """
 Tests des endpoints FastAPI avec mock_db (pas de Firebase réel).
 
-Technique : on utilise pytest `monkeypatch` pour remplacer les fonctions
-firebase dans chaque module API par les équivalents mock_db.
-Ainsi les tests sont rapides, hors-ligne et isolés.
+Technique : on mock les modules lourds (faiss, numpy, sentence_transformers)
+AVANT tout import applicatif pour éviter les dépendances manquantes.
 """
 
 import sys
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+import importlib
 
-# ── Mock faiss et sentence_transformers AVANT tout import applicatif ──
-# Ces libs sont lourdes (ML) ou absentes en CI — on les remplace par des mocks
-sys.modules.setdefault("faiss", MagicMock())
-sys.modules.setdefault("sentence_transformers", MagicMock())
-sys.modules.setdefault("detoxify", MagicMock())
+# Ces modules sont lourds ou absents → on les remplace par des mocks légers
 
+# Créer un faux module numpy avec juste ce qu'il faut
+import types
+
+# Mock numpy
+if 'numpy' not in sys.modules:
+    mock_np = MagicMock()
+    mock_np.array = lambda x, **kwargs: x
+    mock_np.ndarray = list
+    mock_np.float32 = float
+    mock_np.sum = sum
+    mock_np.dot = lambda a, b: 0.0
+    mock_np.linalg = MagicMock()
+    mock_np.linalg.norm = lambda x: 1.0
+    mock_np.load = MagicMock(return_value=MagicMock())
+    mock_np.save = MagicMock()
+    sys.modules['numpy'] = mock_np
+
+# Mock pandas
+if 'pandas' not in sys.modules:
+    mock_pd = MagicMock()
+    mock_pd.read_parquet = MagicMock(return_value=MagicMock())
+    mock_pd.DataFrame = MagicMock()
+    mock_pd.Timestamp = MagicMock()
+    mock_pd.notna = lambda x: True
+    sys.modules['pandas'] = mock_pd
+
+# Mock sentence_transformers
+if 'sentence_transformers' not in sys.modules:
+    mock_st = MagicMock()
+    mock_st.SentenceTransformer = MagicMock()
+    sys.modules['sentence_transformers'] = mock_st
+
+# Mock transformers
+if 'transformers' not in sys.modules:
+    sys.modules['transformers'] = MagicMock()
+
+# Mock detoxify
+if 'detoxify' not in sys.modules:
+    sys.modules['detoxify'] = MagicMock()
+
+# Mock faiss
+if 'faiss' not in sys.modules:
+    mock_faiss = MagicMock()
+    mock_faiss.IndexFlatIP = MagicMock()
+    mock_faiss.read_index = MagicMock(return_value=MagicMock())
+    mock_faiss.write_index = MagicMock()
+    sys.modules['faiss'] = mock_faiss
+
+# Mock firebase_admin
+if 'firebase_admin' not in sys.modules:
+    sys.modules['firebase_admin'] = MagicMock()
+
+# Mock datasets (HuggingFace)
+if 'datasets' not in sys.modules:
+    sys.modules['datasets'] = MagicMock()
+
+# ── Maintenant on peut importer l'app ────────────────────────────────
 import pytest
 from fastapi.testclient import TestClient
 import app.db.mock_db as mock_db
 
-# ── Patch Firebase dans tous les modules API ─────────────────────────
-# On doit patcher AVANT d'importer main.py
+# Patch Firebase dans les modules API
 import app.api.feed as feed_module
 import app.api.interact as interact_module
 import app.api.preferences as prefs_module
@@ -36,38 +88,34 @@ def patch_firebase_with_mock(monkeypatch):
     monkeypatch.setattr(feed_module, "get_user_profile",    mock_db.get_user_profile)
     monkeypatch.setattr(feed_module, "get_user_interactions", mock_db.get_user_interactions)
     monkeypatch.setattr(feed_module, "create_user",         mock_db.create_user)
+    monkeypatch.setattr(feed_module, "get_feed",            lambda **kwargs: [])
 
     # ── interact.py ───────────────────────────────────────────────────
     monkeypatch.setattr(interact_module, "log_interaction",       mock_db.log_interaction)
     monkeypatch.setattr(interact_module, "get_user_interactions", mock_db.get_user_interactions)
     monkeypatch.setattr(interact_module, "update_user_embedding", mock_db.update_user_embedding)
+    monkeypatch.setattr(interact_module, "embed_text",           lambda text: [0.0] * 384)
 
     # ── preferences.py ───────────────────────────────────────────────
     monkeypatch.setattr(prefs_module, "get_user_profile",       mock_db.get_user_profile)
     monkeypatch.setattr(prefs_module, "update_user_preferences", mock_db.update_user_preferences)
     monkeypatch.setattr(prefs_module, "create_user",            mock_db.create_user)
 
-    # Aussi : embed_text → retourne un vecteur nul pour ne pas charger le modèle NLP
-    monkeypatch.setattr(interact_module, "embed_text", lambda text: [0.0] * 384)
-
-    # Aussi : get_feed → retourne une liste vide (moteur FAISS non dispo en test)
-    monkeypatch.setattr(feed_module, "get_feed", lambda **kwargs: [])
-
     mock_db.reset_mock()
     yield
     mock_db.reset_mock()
 
 
-# ── Client HTTP de test (sans démarrer uvicorn) ───────────────────────
+# ── Client HTTP de test ──────────────────────────────────────────────
 @pytest.fixture
 def client():
     from app.main import app
     return TestClient(app)
 
 
-# ─────────────────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════
 # Tests /health
-# ─────────────────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════
 
 def test_health(client):
     """Le serveur répond 200 avec status ok."""
@@ -77,9 +125,9 @@ def test_health(client):
     print("✅ GET /health → ok")
 
 
-# ─────────────────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════
 # Tests GET /api/preferences/{user_id}
-# ─────────────────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════
 
 def test_get_preferences_user_inexistant(client):
     """Lire les prefs d'un user inexistant → 404."""
@@ -101,9 +149,9 @@ def test_get_preferences_user_existant(client):
     print(f"✅ GET /preferences/alice → {data}")
 
 
-# ─────────────────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════
 # Tests PUT /api/preferences/{user_id}
-# ─────────────────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════
 
 def test_update_preferences_cree_user_si_absent(client):
     """PUT prefs sur un user inexistant → le crée automatiquement."""
@@ -139,13 +187,13 @@ def test_update_preferences_user_existant(client):
 def test_update_preferences_mode_invalide(client):
     """PUT avec un mode invalide → 422 (validation Pydantic)."""
     payload = {
-        "mode": "turbo",       # mode inexistant
+        "mode": "turbo",
         "interests": [],
         "toxicity_threshold": 0.3,
         "content_type": "all"
     }
     res = client.put("/api/preferences/carol", json=payload)
-    assert res.status_code == 422   # Unprocessable Entity
+    assert res.status_code == 422
     print("✅ PUT mode=turbo → 422 validation error")
 
 
@@ -154,7 +202,7 @@ def test_update_preferences_threshold_hors_range(client):
     payload = {
         "mode": "default",
         "interests": [],
-        "toxicity_threshold": 1.5,   # hors de [0.0, 1.0]
+        "toxicity_threshold": 1.5,
         "content_type": "all"
     }
     res = client.put("/api/preferences/diana", json=payload)
@@ -162,9 +210,9 @@ def test_update_preferences_threshold_hors_range(client):
     print("✅ PUT threshold=1.5 → 422 validation error")
 
 
-# ─────────────────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════
 # Tests POST /api/preferences/{user_id}/mode/{mode}
-# ─────────────────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════
 
 def test_set_mode_valide(client):
     """Changer de mode sur un user existant → 200."""
@@ -194,9 +242,9 @@ def test_set_mode_user_inexistant(client):
     print("✅ POST /mode/fun sur ghost → 404")
 
 
-# ─────────────────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════
 # Tests POST /api/interact
-# ─────────────────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════
 
 def test_interact_like(client):
     """Un like est bien enregistré → 200 + status logged."""
@@ -221,7 +269,7 @@ def test_interact_action_invalide(client):
     payload = {
         "user_id": "henry",
         "post_id": "post_2",
-        "action": "dislike",    # action inexistante dans le Literal
+        "action": "dislike",
         "watch_time": 0.0
     }
     res = client.post("/api/interact", json=payload)
@@ -230,11 +278,10 @@ def test_interact_action_invalide(client):
 
 
 def test_interact_met_a_jour_embedding(client):
-    """Après un like, l'embedding de l'user change (sort de [0,0,0,...])."""
+    """Après un like, l'embedding de l'user est mis à jour."""
     import asyncio
     asyncio.run(mock_db.create_user("ivan"))
 
-    # Interaction avec embedding non-nul simulé via mock embed_text
     payload = {
         "user_id": "ivan",
         "post_id": "post_5",
@@ -244,10 +291,7 @@ def test_interact_met_a_jour_embedding(client):
     }
     client.post("/api/interact", json=payload)
 
-    # L'embedding dans mock_db doit avoir été mis à jour
-    import asyncio
     profile = asyncio.run(mock_db.get_user_profile("ivan"))
-    # Avec embed_text mocké → [0.0]*384, embedding reste nul mais l'appel a bien eu lieu
     assert profile is not None
     assert len(profile["embedding"]) == 384
     print("✅ POST /interact → update_user_embedding appelé")
