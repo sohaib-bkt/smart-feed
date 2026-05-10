@@ -14,7 +14,7 @@ def _load_resources():
     global _index, _posts_df
     if _index is None:
         _index = faiss.read_index('data/processed/faiss_index.bin')
-        _posts_df = pd.read_parquet('data/processed/huffpost_meta.parquet')
+        _posts_df = pd.read_parquet('data/processed/huffpost_with_meta.parquet')
         print(f'FAISS index chargé : {_index.ntotal} vecteurs')
 
 def get_feed(
