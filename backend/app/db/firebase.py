@@ -110,6 +110,16 @@ async def log_interaction(data: dict) -> None:
     db.collection("interactions").add(data)  # .add() = ID auto-généré
 
 
+async def get_all_interactions() -> list:
+    """
+    Récupère TOUTES les interactions de la base Firestore.
+    Used for building the collaborative filtering matrix.
+    """
+    db = get_db()
+    docs = db.collection("interactions").stream()
+    return [d.to_dict() for d in docs]
+
+
 async def get_user_interactions(user_id: str, last_n: int = 100) -> list:
     """
     Récupère les N dernières interactions d'un utilisateur,
