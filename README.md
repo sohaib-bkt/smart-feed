@@ -21,6 +21,14 @@ Toxicity module (Phase 1)
 - Run unit tests:
 	`pytest tests/test_toxicity.py -v`
 
+Collaborative Filtering (Phase 2)
+
+- Run validation suite (full diagnostics):
+	`cd backend`
+	`python -m tests.collaborative_validation`
+- Run unit tests:
+	`pytest tests/test_collaborative.py -v`
+
 Firebase
 
 Point d'entrée de l'API Smart Feed.
