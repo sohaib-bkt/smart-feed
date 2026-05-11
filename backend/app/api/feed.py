@@ -10,7 +10,7 @@ Pipeline complet :
 """
 
 from fastapi import APIRouter, HTTPException, Query
-from app.services.recommender import get_feed
+from app.services.recommender import get_feed, get_feed_v2
 from app.services.user_profile import compute_user_embedding, get_top_interests
 from app.db.firebase import get_user_profile, get_user_interactions, create_user
 
@@ -21,6 +21,7 @@ router = APIRouter()
 async def get_user_feed(
     user_id: str,
     limit: int = Query(default=20, ge=1, le=50, description="Nombre de posts (max 50)"),
+    version: str = Query(default="v1", pattern="^v[12]$"),
 ):
     """
     Retourne le feed personnalisé pour un utilisateur.
@@ -51,14 +52,22 @@ async def get_user_feed(
         prefs["interests"] = get_top_interests(interactions)
 
     # ── 4. Générer le feed ─────────────────────────────────────────────
-    feed_items = get_feed(
-        user_embedding=user_emb,
-        user_prefs=prefs,
-        n_results=limit,
-    )
+    if version == "v2":
+        feed_items = get_feed_v2(
+            user_embedding=user_emb,
+            user_prefs=prefs,
+            n_results=limit,
+        )
+    else:
+        feed_items = get_feed(
+            user_embedding=user_emb,
+            user_prefs=prefs,
+            n_results=limit,
+        )
 
     return {
         "user_id": user_id,
+        "version": version,
         "mode": prefs.get("mode", "default"),
         "count": len(feed_items),
         "feed": feed_items,

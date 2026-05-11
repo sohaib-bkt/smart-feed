@@ -1,4 +1,11 @@
-import pandas as pd, numpy as np
+from pathlib import Path
+import sys
+
+import numpy as np
+import pandas as pd
+
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+
 from app.models.embeddings import embed_batch
 
 df = pd.read_parquet("data/raw/huffpost.parquet")
