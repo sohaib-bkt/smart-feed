@@ -61,3 +61,11 @@ curl -X POST "http://localhost:8000/api/preferences/bob/mode/learning"
 # 5. Revérifier le feed après interactions
 curl "http://localhost:8000/api/feed/bob?limit=10"
 ```
+
+## La formule pondérée
+```
+score_final = 0.45 × similarity(user_emb, post_emb)
+            + 0.25 × (1 − toxicity_score)
+            + 0.15 × popularity(likes, views)
+            + 0.15 × freshness(created_at)
+```
