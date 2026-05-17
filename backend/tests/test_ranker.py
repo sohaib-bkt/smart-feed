@@ -162,7 +162,7 @@ class TestFreshnessScore:
         assert 0.0 <= _freshness_score(old) <= 1.0
 
     def test_naive_datetime_handled(self):
-        naive = datetime.utcnow() - timedelta(days=1)
+        naive = datetime.now() - timedelta(days=1)
         score = _freshness_score(naive)
         assert 0.0 <= score <= 1.0
 
