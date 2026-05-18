@@ -1,16 +1,23 @@
 """
 Endpoint GET /api/feed/{user_id}
 
-Pipeline complet :
+v1 —> content-based pur (FAISS + scoring Phase 1)
+v2 —> hybride (FAISS + LightFM) + re-ranking final via rank_candidates
+
+Pipeline v2 :
     1. Charger (ou créer) le profil utilisateur depuis Firestore
     2. Recalculer son embedding depuis ses 100 dernières interactions
     3. Détecter ses intérêts si non renseignés
-    4. Appeler le moteur de recommandation (FAISS + scoring)
-    5. Retourner le feed trié
+    4. get_hybrid_feed()  → 60 candidats scorés (content-based + CF)
+    5. rank_candidates()  → re-ranking final pondéré (similarité, toxicité,
+                            popularité, fraîcheur)
+    6. Retourner les limit premiers
 """
 
-from fastapi import APIRouter, HTTPException, Query
-from app.services.recommender import get_feed, get_feed_v2
+from fastapi import APIRouter, Query
+from app.services.recommender import get_feed
+from app.services.hybrid_recommender import get_hybrid_feed
+from app.models.ranker import rank_candidates
 from app.services.user_profile import compute_user_embedding, get_top_interests
 from app.db.firebase import get_user_profile, get_user_interactions, create_user
 
@@ -26,48 +33,59 @@ async def get_user_feed(
     """
     Retourne le feed personnalisé pour un utilisateur.
 
-    - Si l'utilisateur n'existe pas encore → profil créé automatiquement
-    - L'embedding est recalculé à chaque appel depuis l'historique réel
-    - Les intérêts sont auto-détectés si non définis manuellement
+    - **v1** : content-based pur (Phase 1 — FAISS + scoring pondéré)
+    - **v2** : hybride content-based + collaboratif, puis re-ranking final
 
-    **Firestore écrit/lit :**
-    - `users/{user_id}` → profil + préférences
-    - `interactions/{user_id}` → historique pour recalculer l'embedding
+    Si l'utilisateur n'existe pas encore → profil créé automatiquement.
+
+    **Firestore lit :**
+    - `users/{user_id}`-> profil + préférences
+    - `interactions/{user_id}` -> historique pour recalculer l'embedding
     """
 
-    # ── 1. Charger ou créer le profil ──────────────────────────────────
+    # 1. Charger ou créer le profil ──────────────────────────────────
     profile = await get_user_profile(user_id)
     if not profile:
         profile = await create_user(user_id)
-        # → Firestore : crée le document users/{user_id}
 
-    # ── 2. Recalculer l'embedding depuis l'historique ──────────────────
+    # 2. Recalculer l'embedding depuis l'historique ──────────────────
     interactions = await get_user_interactions(user_id, last_n=100)
-    # → Firestore : lit la collection interactions/ filtrée par user_id
     user_emb = compute_user_embedding(interactions)
 
-    # ── 3. Enrichir les intérêts si vides ─────────────────────────────
+    # 3. Enrichir les intérêts si vides ─────────────────────────────
     prefs = profile.get("preferences", {})
     if not prefs.get("interests") and interactions:
         prefs["interests"] = get_top_interests(interactions)
 
-    # ── 4. Générer le feed ─────────────────────────────────────────────
+    # 4. Générer le feed ─────────────────────────────────────────────
     if version == "v2":
-        feed_items = get_feed_v2(
+        # Feed hybride : content-based (FAISS) + collaboratif (LightFM)
+        # → 60 candidats pré-scorés
+        candidates = get_hybrid_feed(
+            user_id=user_id,
             user_embedding=user_emb,
             user_prefs=prefs,
-            n_results=limit,
+            n_candidates=300,
+            n_results=60,
         )
+
+        # Re-ranking final : formule pondérée (similarité, toxicité, pop, fraîcheur)
+        feed_items = rank_candidates(candidates, user_embedding=user_emb)[:limit]
+        ranking_method = "hybrid_xgboost"
+
     else:
+        # Fallback v1 — content-based pur Phase 1
         feed_items = get_feed(
             user_embedding=user_emb,
             user_prefs=prefs,
             n_results=limit,
         )
+        ranking_method = "content_based_v1"
 
     return {
         "user_id": user_id,
         "version": version,
+        "ranking_method": ranking_method,
         "mode": prefs.get("mode", "default"),
         "count": len(feed_items),
         "feed": feed_items,
