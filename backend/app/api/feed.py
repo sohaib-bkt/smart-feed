@@ -67,6 +67,8 @@ async def get_user_feed(
             user_prefs=prefs,
             n_candidates=300,
             n_results=60,
+            diversify=True,           # ← Activer la diversification
+            max_per_category=3  
         )
 
         # Re-ranking final : formule pondérée (similarité, toxicité, pop, fraîcheur)

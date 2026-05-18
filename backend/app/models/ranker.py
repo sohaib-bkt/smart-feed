@@ -1,5 +1,5 @@
 """
-ranker.py : Formule de scoring pondérée (Phase 2)
+ranker.py : Formule de scoring pondérée (Phase 2) avec diversification
 
 Score final = w_sim   * cosine_similarity(user_emb, post_emb)
             + w_clean * (1 - toxicity_score)
@@ -7,7 +7,12 @@ Score final = w_sim   * cosine_similarity(user_emb, post_emb)
             + w_fresh * freshness_score(created_at)
 
 Les poids sont configurables via RANKER_WEIGHTS.
-Les embeddings sont supposés déjà normalisés (L2=1),
+Les embeddings sont supposés déjà normalisés (L2=1).
+
+AMÉLIORATIONS (Solution 4) :
+- Utilise le score existant du candidat comme base
+- Ajuste avec le score collaboratif (CF) pour différencier
+- Diversifie par catégorie (max 3 par catégorie)
 """
 
 from __future__ import annotations
@@ -28,6 +33,13 @@ RANKER_WEIGHTS: dict[str, float] = {
     "popularity": 0.15,   # engagement social  (likes + views)
     "freshness":  0.15,   # fraicheur du post  
 }
+
+# Paramètres de diversification
+MAX_ARTICLES_PER_CATEGORY = 3     # Max 3 articles par catégorie
+CF_BOOST_THRESHOLD = 0.75          # Seuil pour boost CF
+CF_BOOST_STRONG = 0.08             # Boost fort (>0.75)
+CF_BOOST_WEAK = 0.04               # Boost faible (0.6-0.75)
+CF_PENALTY = -0.05                 # Pénalité pour CF faible (<0.4)
 
 # (après N jours → score divisé par 2)
 FRESHNESS_HALF_LIFE_DAYS: float = 7.0
@@ -100,6 +112,25 @@ def _freshness_score(created_at: Optional[datetime]) -> float:
     return math.exp(-lam * age_days)
 
 
+def _calculate_cf_adjustment(cf_score: float) -> float:
+    """
+    Calcule l'ajustement basé sur le score collaboratif.
+    
+    Args:
+        cf_score: Score collaboratif (0-1)
+    
+    Returns:
+        Ajustement à ajouter au score (peut être négatif)
+    """
+    if cf_score > CF_BOOST_THRESHOLD:
+        return CF_BOOST_STRONG
+    elif cf_score > 0.6:
+        return CF_BOOST_WEAK
+    elif cf_score < 0.4:
+        return CF_PENALTY
+    return 0.0
+
+
 # ---------------------------------------------------------------------------
 # Fonctions publiques
 # ---------------------------------------------------------------------------
@@ -157,9 +188,15 @@ def rank_candidates(
     candidates: list[dict],
     user_embedding: list[float] | None = None,
     weights: dict[str, float] | None = None,
+    diversify: bool = True,
+    max_per_category: int = MAX_ARTICLES_PER_CATEGORY,
 ) -> list[dict]:
     """
-    Trie une liste de candidats par score décroissant.
+    Trie une liste de candidats par score décroissant avec diversification.
+    
+    AMÉLIORATION (Solution 4) :
+    - Utilise le score existant + ajustement basé sur le score collaboratif
+    - Diversifie par catégorie pour éviter la redondance
 
     Chaque candidat reçoit un champ `rank_score` (float).
     Si `user_embedding` est None, l'embedding nul est utilisé
@@ -169,6 +206,8 @@ def rank_candidates(
         candidates     : liste de dicts (voir score_candidate)
         user_embedding : vecteur utilisateur 384-dim
         weights        : poids custom (optionnel)
+        diversify      : activer la diversification par catégorie
+        max_per_category: nombre max d'articles par catégorie
 
     Returns:
         Liste triée par rank_score décroissant, avec le champ ajouté.
@@ -177,12 +216,110 @@ def rank_candidates(
         return []
 
     emb = user_embedding or [0.0] * 384
+    w = weights or RANKER_WEIGHTS
 
     scored = []
     for c in candidates:
         c = dict(c)  # copie pour ne pas muter l'original
-        c["rank_score"] = score_candidate(c, emb, weights)
+        
+        # Calculer le score de base avec la formule pondérée
+        base_score = score_candidate(c, emb, w)
+        
+        # --- SOLUTION 4 : Ajustement basé sur le score collaboratif ---
+        # Récupérer le score collaboratif depuis score_detail
+        score_detail = c.get("score_detail", {})
+        cf_score = score_detail.get("collaborative", 0.5)
+        
+        # Calculer l'ajustement
+        adjustment = _calculate_cf_adjustment(cf_score)
+        
+        # Score final = base_score + ajustement CF
+        final_score = max(0.01, min(0.99, base_score + adjustment))
+        
+        c["rank_score"] = round(final_score, 6)
+        c["_base_score"] = round(base_score, 6)  # Pour debug
+        c["_cf_adjustment"] = adjustment         # Pour debug
+        
         scored.append(c)
-
+    
+    # Trier par score (décroissant)
     scored.sort(key=lambda x: x["rank_score"], reverse=True)
+    
+    # --- DIVERSIFICATION : limiter par catégorie ---
+    if diversify:
+        diversified = []
+        category_count = {}
+        
+        for item in scored:
+            category = item.get("category", "Unknown")
+            
+            # Vérifier si on peut ajouter cette catégorie
+            if category_count.get(category, 0) < max_per_category:
+                diversified.append(item)
+                category_count[category] = category_count.get(category, 0) + 1
+        
+        logger.debug(f"Diversification: {len(scored)} → {len(diversified)} items "
+                    f"(max {max_per_category} per category)")
+        
+        return diversified
+    
     return scored
+
+
+def rank_candidates_simple(
+    candidates: list[dict],
+    user_embedding: list[float] | None = None,
+    weights: dict[str, float] | None = None,
+) -> list[dict]:
+    """
+    Version simple SANS diversification (comportement original).
+    Utile pour comparaison A/B testing.
+    """
+    return rank_candidates(candidates, user_embedding, weights, diversify=False)
+
+
+def explain_ranking(candidate: dict, user_embedding: list[float]) -> dict:
+    """
+    Retourne le détail du calcul du score pour un candidat.
+    Utile pour le debugging et l'explicabilité.
+    """
+    w = RANKER_WEIGHTS
+    
+    post_emb = candidate.get("embedding") or []
+    toxicity = float(candidate.get("toxicity_score", 0.0))
+    likes = int(candidate.get("likes", 0))
+    views = int(candidate.get("views", 0))
+    created_at = candidate.get("created_at")
+    
+    sim = _similarity_score(user_embedding, post_emb)
+    clean = _clean_score(toxicity)
+    pop = _popularity_score(likes, views)
+    fresh = _freshness_score(created_at)
+    
+    base_score = (
+        w["similarity"] * sim +
+        w["clean"] * clean +
+        w["popularity"] * pop +
+        w["freshness"] * fresh
+    )
+    
+    # Ajustement CF
+    score_detail = candidate.get("score_detail", {})
+    cf_score = score_detail.get("collaborative", 0.5)
+    adjustment = _calculate_cf_adjustment(cf_score)
+    
+    final_score = max(0.01, min(0.99, base_score + adjustment))
+    
+    return {
+        "base_score": round(base_score, 6),
+        "cf_score": cf_score,
+        "cf_adjustment": adjustment,
+        "final_score": round(final_score, 6),
+        "components": {
+            "similarity": round(sim, 4),
+            "cleanliness": round(clean, 4),
+            "popularity": round(pop, 4),
+            "freshness": round(fresh, 4)
+        },
+        "weights": w
+    }

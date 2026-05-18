@@ -73,6 +73,10 @@ def patch_all(monkeypatch):
     monkeypatch.setattr(feed_module, "get_user_interactions", mock_db.get_user_interactions)
     monkeypatch.setattr(feed_module, "create_user",          mock_db.create_user)
 
+    # Subprocess → no-op (évite l'exécution réelle dans BackgroundTasks)
+    import subprocess as sp
+    monkeypatch.setattr(sp, "run", lambda *a, **kw: type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})())
+
     # v1 fallback
     monkeypatch.setattr(feed_module, "get_feed", lambda **kwargs: [])
 
@@ -220,7 +224,7 @@ class TestAdminRetrain:
         res = client.post("/api/admin/retrain")
         data = res.json()
         assert "steps" in data
-        assert len(data["steps"]) == 4
+        assert len(data["steps"]) == 2
         print(f"✅ {len(data['steps'])} étapes listées")
 
     def test_retrain_background_ne_bloque_pas(self, client):

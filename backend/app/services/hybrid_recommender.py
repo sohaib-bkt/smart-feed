@@ -1,9 +1,10 @@
-# app/services/hybrid_recommender.py (fixed version)
+# app/services/hybrid_recommender.py (version avec diversification)
 
 import faiss
 import numpy as np
 import pandas as pd
 from datetime import datetime
+from collections import defaultdict
 from app.models.collaborative import get_cf_scores
 from app.services.scoring import compute_score
 
@@ -11,6 +12,10 @@ _index = None
 _df = None
 _position_to_id = None
 _id_to_position = None
+
+# Paramètres de diversification
+MAX_PER_CATEGORY = 3  # Maximum d'articles par catégorie
+MIN_CATEGORIES = 3    # Nombre minimum de catégories à essayer d'inclure
 
 def _load():
     global _index, _df, _position_to_id, _id_to_position
@@ -66,12 +71,42 @@ def _safe_get_text(post: dict, key: str, default: str = "") -> str:
     return default
 
 
+def _diversify_results(results: list[dict], max_per_category: int = MAX_PER_CATEGORY) -> list[dict]:
+    """
+    Diversifie les résultats en limitant le nombre d'articles par catégorie.
+    
+    Args:
+        results: Liste des articles triés par score
+        max_per_category: Nombre maximum d'articles par catégorie
+    
+    Returns:
+        Liste diversifiée (même ordre de score, mais limitée par catégorie)
+    """
+    if not results:
+        return []
+    
+    diversified = []
+    category_count = defaultdict(int)
+    
+    for item in results:
+        category = item.get('category', 'Unknown')
+        
+        # Ajouter l'article si la catégorie n'a pas atteint sa limite
+        if category_count[category] < max_per_category:
+            diversified.append(item)
+            category_count[category] += 1
+    
+    return diversified
+
+
 def get_hybrid_feed(
     user_id: str,
     user_embedding: list[float],
     user_prefs: dict,
     n_candidates: int = 200,
-    n_results: int = 20
+    n_results: int = 20,
+    diversify: bool = True,
+    max_per_category: int = MAX_PER_CATEGORY
 ) -> list[dict]:
     """Feed hybride = content-based (FAISS) + collaborative (Implicit)."""
     _load()
@@ -85,8 +120,9 @@ def get_hybrid_feed(
     else:
         query = np.array([user_embedding], dtype="float32")
     
-    # FAISS search
-    sims, positions = _index.search(query, n_candidates)
+    # FAISS search (prendre plus de candidats pour permettre la diversification)
+    search_n = n_candidates * 2 if diversify else n_candidates
+    sims, positions = _index.search(query, search_n)
     
     # Get candidate article IDs
     candidate_positions = [int(p) for p in positions[0] if p >= 0]
@@ -138,7 +174,7 @@ def get_hybrid_feed(
         cb_score = cb_scored["score"]
         hybrid_score = (ALPHA * cb_score) + (BETA * cf_score)
         
-        # FIX: Safely extract text with proper string conversion
+        # Safely extract text
         headline = _safe_get_text(post, "headline")
         if not headline:
             headline = _safe_get_text(post, "text")
@@ -158,7 +194,13 @@ def get_hybrid_feed(
             "explanation": _build_explanation(float(sim), cf_score, post, user_prefs)
         })
     
+    # Trier par score
     results.sort(key=lambda x: x["score"], reverse=True)
+    
+    # Appliquer la diversification si demandée
+    if diversify:
+        results = _diversify_results(results, max_per_category)
+    
     return results[:n_results]
 
 

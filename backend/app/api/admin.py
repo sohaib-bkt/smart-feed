@@ -19,9 +19,7 @@ router = APIRouter()
 # Séquence complète de ré-entraînement Phase 2
 _RETRAIN_STEPS = [
     ["python", "scripts/phase2/build_interaction_matrix.py"],
-    ["python", "scripts/phase2/train_lightfm.py"],
-    ["python", "scripts/phase2/build_xgb_dataset.py"],
-    ["python", "scripts/phase2/train_xgboost.py"],
+    ["python", "scripts/phase2/train_implicit.py"],
 ]
 
 # Script de reconstruction de l'index FAISS v2
@@ -72,15 +70,13 @@ def _run_rebuild_index() -> None:
 )
 async def retrain_models(background_tasks: BackgroundTasks):
     """
-    Déclenche le pipeline complet de ré-entraînement en arrière-plan :
+    Déclenche le pipeline de ré-entraînement en arrière-plan :
 
     1. `build_interaction_matrix.py`  → matrice interactions Firestore
-    2. `train_lightfm.py`             → modèle collaboratif
-    3. `build_xgb_dataset.py`         → dataset features pour XGBoost
-    4. `train_xgboost.py`             → modèle de re-ranking
+    2. `train_implicit.py`            → modèle collaboratif (ALS)
 
     Retourne immédiatement — le retrain tourne en tâche de fond.
-    Durée estimée : **5 à 10 minutes**.
+    Durée estimée : **2 à 5 minutes**.
     """
     background_tasks.add_task(_run_retrain)
     return {
