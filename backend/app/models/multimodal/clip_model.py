@@ -24,6 +24,20 @@ def _load() -> tuple[CLIPModel, CLIPProcessor]:
     return model, processor
 
 
+def _as_tensor(output: torch.Tensor) -> torch.Tensor:
+    if isinstance(output, torch.Tensor):
+        return output
+    if hasattr(output, "text_embeds") and output.text_embeds is not None:
+        return output.text_embeds
+    if hasattr(output, "image_embeds") and output.image_embeds is not None:
+        return output.image_embeds
+    if hasattr(output, "pooler_output") and output.pooler_output is not None:
+        return output.pooler_output
+    if hasattr(output, "last_hidden_state") and output.last_hidden_state is not None:
+        return output.last_hidden_state[:, 0]
+    raise TypeError("Unsupported CLIP output type")
+
+
 def embed_text_clip(text: str) -> list[float]:
     """Embed a text string using CLIP's text encoder -> 512-dim normalised vector."""
     model, processor = _load()
@@ -35,6 +49,7 @@ def embed_text_clip(text: str) -> list[float]:
     )
     with torch.no_grad():
         emb = model.get_text_features(**inputs)
+    emb = _as_tensor(emb)
     emb = emb / emb.norm(dim=-1, keepdim=True)
     return emb[0].tolist()
 
@@ -45,6 +60,7 @@ def embed_image_clip(image: Image.Image) -> list[float]:
     inputs = processor(images=image, return_tensors="pt")
     with torch.no_grad():
         emb = model.get_image_features(**inputs)
+    emb = _as_tensor(emb)
     emb = emb / emb.norm(dim=-1, keepdim=True)
     return emb[0].tolist()
 

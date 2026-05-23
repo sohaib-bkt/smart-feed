@@ -5,7 +5,9 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 from collections import defaultdict
+from pathlib import Path
 from app.models.collaborative import get_cf_scores
+from app.services.recommender import get_feed_v2
 from app.services.scoring import compute_score
 
 _index = None
@@ -99,6 +101,13 @@ def _diversify_results(results: list[dict], max_per_category: int = MAX_PER_CATE
     return diversified
 
 
+def _collab_artifacts_available() -> bool:
+    backend_root = Path(__file__).resolve().parents[2]
+    model_path = backend_root / "app/models/implicit_model.pkl"
+    matrix_path = backend_root / "data/processed/interaction_matrix.npz"
+    return model_path.exists() and matrix_path.exists()
+
+
 def get_hybrid_feed(
     user_id: str,
     user_embedding: list[float],
@@ -109,6 +118,13 @@ def get_hybrid_feed(
     max_per_category: int = MAX_PER_CATEGORY
 ) -> list[dict]:
     """Feed hybride = content-based (FAISS) + collaborative (Implicit)."""
+    if not _collab_artifacts_available():
+        return get_feed_v2(
+            user_embedding=user_embedding,
+            user_prefs=user_prefs,
+            n_candidates=n_candidates,
+            n_results=n_results,
+        )
     _load()
     
     ALPHA = 0.6
