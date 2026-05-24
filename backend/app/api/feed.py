@@ -15,7 +15,7 @@ Pipeline v2 :
 """
 
 from fastapi import APIRouter, Query
-from app.services.recommender import get_feed
+from app.services.recommender import get_feed, get_feed_v2, get_feed_v3
 from app.services.hybrid_recommender import get_hybrid_feed
 from app.models.ranker import rank_candidates
 from app.services.user_profile import compute_user_embedding, get_top_interests
@@ -28,7 +28,7 @@ router = APIRouter()
 async def get_user_feed(
     user_id: str,
     limit: int = Query(default=20, ge=1, le=50, description="Nombre de posts (max 50)"),
-    version: str = Query(default="v1", pattern="^v[12]$"),
+    version: str = Query(default="v1", pattern="^v[123]$"),
 ):
     """
     Retourne le feed personnalisé pour un utilisateur.
@@ -74,6 +74,15 @@ async def get_user_feed(
         # Re-ranking final : formule pondérée (similarité, toxicité, pop, fraîcheur)
         feed_items = rank_candidates(candidates, user_embedding=user_emb)[:limit]
         ranking_method = "hybrid_xgboost"
+
+    elif version == "v3":
+        feed_items = get_feed_v3(
+            user_embedding=user_emb,
+            user_prefs=prefs,
+            n_results=limit,
+            embedding_dim=384,   # standard MiniLM path
+        )
+        ranking_method = "content_based_v3"
 
     else:
         # Fallback v1 — content-based pur Phase 1

@@ -1,0 +1,31 @@
+nohup: ignoring input
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading MS-COCO (streaming, first 10000 images)...
+Traceback (most recent call last):
+  File "/home/ismhh06/Documents/Smart_Feed/smart-feed/backend/scripts/phase3/build_coco_embeddings.py", line 74, in <module>
+    main()
+  File "/home/ismhh06/Documents/Smart_Feed/smart-feed/backend/scripts/phase3/build_coco_embeddings.py", line 37, in main
+    for i, item in enumerate(ds):
+  File "/home/ismhh06/miniconda3/envs/my_env/lib/python3.12/site-packages/datasets/iterable_dataset.py", line 2270, in __iter__
+    for key, example in ex_iterable:
+  File "/home/ismhh06/miniconda3/envs/my_env/lib/python3.12/site-packages/datasets/iterable_dataset.py", line 1857, in __iter__
+    batch = formatter.format_batch(pa_table)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ismhh06/miniconda3/envs/my_env/lib/python3.12/site-packages/datasets/formatting/formatting.py", line 467, in format_batch
+    batch = self.python_features_decoder.decode_batch(batch)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ismhh06/miniconda3/envs/my_env/lib/python3.12/site-packages/datasets/formatting/formatting.py", line 229, in decode_batch
+    return self.features.decode_batch(batch) if self.features else batch
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ismhh06/miniconda3/envs/my_env/lib/python3.12/site-packages/datasets/features/features.py", line 2144, in decode_batch
+    decode_nested_example(self[column_name], value, token_per_repo_id=token_per_repo_id)
+  File "/home/ismhh06/miniconda3/envs/my_env/lib/python3.12/site-packages/datasets/features/features.py", line 1414, in decode_nested_example
+    return schema.decode_example(obj, token_per_repo_id=token_per_repo_id) if obj is not None else None
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ismhh06/miniconda3/envs/my_env/lib/python3.12/site-packages/datasets/features/image.py", line 169, in decode_example
+    image = PIL.Image.open(path)
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/home/ismhh06/miniconda3/envs/my_env/lib/python3.12/site-packages/PIL/Image.py", line 3512, in open
+    fp = builtins.open(filename, "rb")
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/ismhh06/Documents/Smart_Feed/smart-feed/backend/zip:/val2014/COCO_val2014_000000522418.jpg'

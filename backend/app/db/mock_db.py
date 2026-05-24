@@ -72,6 +72,11 @@ async def log_interaction(data: dict) -> None:
     _interactions_store.append(entry)
 
 
+async def get_all_interactions() -> list:
+    """Retourne toutes les interactions en mémoire."""
+    return copy.deepcopy(_interactions_store)
+
+
 async def get_user_interactions(user_id: str, last_n: int = 100) -> list:
     """
     Retourne les N dernières interactions de l'utilisateur,
