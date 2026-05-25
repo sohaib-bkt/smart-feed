@@ -201,72 +201,85 @@ def get_feed_v3(
     n_candidates: int = 200,
     n_results: int = 20,
     embedding_dim: int = 384,
+    include_images: bool = True,
+    include_videos: bool = True
 ) -> list[dict]:
     """
-    Feed using FAISS V3 - unified 512-dim multimodal index.
-
-    Supports:
-      - 384-dim user embeddings (MiniLM) -> auto-projected to 512
-      - 512-dim user embeddings (CLIP)   -> used directly
-
-    Args:
-        user_embedding : user vector from compute_user_embedding()
-        user_prefs     : preferences dict (mode, interests, etc.)
-        n_candidates   : FAISS candidates to score
-        n_results      : posts to return
-        embedding_dim  : 384 (MiniLM, default) or 512 (CLIP)
-
-    Returns:
-        Ranked list of scored posts with modal + source fields.
+    Feed multimodal v3 avec support images et vidéos.
     """
     _load_resources_v3()
-
-    if embedding_dim == 384:
-        query = _project_384_to_512(user_embedding)
+    
+    # Projeter l'embedding utilisateur
+    if embedding_dim == 384 and _proj_384_512 is not None:
+        query_emb = np.array([user_embedding], dtype='float32')
+        query_emb = query_emb @ _proj_384_512
     else:
-        query = np.array(user_embedding, dtype="float32").reshape(1, -1)
-        norm = np.linalg.norm(query)
-        if norm > 0:
-            query /= norm
-
-    sims, ids = _index_v3.search(query, n_candidates)
-
+        query_emb = np.array([user_embedding], dtype='float32')
+    
+    # Normaliser
+    norm = np.linalg.norm(query_emb)
+    if norm > 0:
+        query_emb = query_emb / norm
+    
+    # Recherche FAISS (prendre plus de candidats pour diversité)
+    search_k = n_candidates * 2
+    scores, indices = _index_v3.search(query_emb, search_k)
+    
     results = []
-    user_interests = user_prefs.get("interests", [])
-
-    for sim, idx in zip(sims[0], ids[0]):
+    for score, idx in zip(scores[0], indices[0]):
         if idx < 0 or idx >= len(_posts_df_v3):
             continue
-
+        
         post = _posts_df_v3.iloc[idx].to_dict()
-
-        created_at = None
-        if "date" in post and pd.notna(post.get("date")):
-            created_at = pd.Timestamp(post["date"]).to_pydatetime()
-
-        scored = compute_score(
-            cosine_sim=float(sim),
-            toxicity_score=post.get("toxicity_score", 0.0),
-            category=post.get("category", ""),
-            user_interests=user_interests,
-            created_at=created_at,
-            user_prefs=user_prefs,
-        )
-
-        if scored["score"] > 0:
-            results.append(
-                {
-                    "id": str(idx),
-                    "text": post.get("text", "")[:280],
-                    "category": post.get("category", ""),
-                    "source": post.get("source", ""),
-                    "modal": post.get("modal", "text"),
-                    "toxicity_score": post.get("toxicity_score", 0.0),
-                    "score": scored["score"],
-                    "score_detail": scored.get("detail", {}),
-                    "explanation": _build_explanation(scored, post, user_prefs),
-                }
-            )
-
-    results.sort(key=lambda x: x["score"], reverse=True)
+        modal = post.get('modal', 'text')
+        
+        # Filtrer par modalité
+        if modal == 'image' and not include_images:
+            continue
+        if modal == 'video' and not include_videos:
+            continue
+        
+        # Récupérer le texte
+        text = post.get('text', '')
+        if not text or text == 'None' or str(text) == 'nan':
+            text = post.get('caption', '')
+        if not text or text == 'None':
+            text = f"{modal} content"
+        
+        # Convertir en string proprement
+        text = str(text) if text else ""
+        
+        results.append({
+            'id': str(post.get('id', idx)),
+            'text': text[:500],
+            'category': str(post.get('category', 'general')),
+            'modal': modal,
+            'source': str(post.get('source', 'unknown')),
+            'score': float(score),
+            'score_detail': {
+                'similarity': float(score),
+                'modal': modal
+            },
+            'explanation': f"Recommandé car : {modal} similaire à vos intérêts"
+        })
+    
+    # Diversifier les modalités si demandé
+    if include_images and include_videos and len(results) > n_results:
+        text_results = [r for r in results if r['modal'] == 'text']
+        image_results = [r for r in results if r['modal'] == 'image']
+        video_results = [r for r in results if r['modal'] == 'video']
+        
+        # Construire un feed diversifié
+        diversified = []
+        diversified.extend(text_results[:n_results//2])
+        diversified.extend(image_results[:n_results//3])
+        diversified.extend(video_results[:n_results//6])
+        
+        # Compléter avec les meilleurs restants
+        remaining = [r for r in results if r not in diversified]
+        diversified.extend(remaining[:n_results - len(diversified)])
+        
+        diversified.sort(key=lambda x: x['score'], reverse=True)
+        results = diversified
+    
     return results[:n_results]
