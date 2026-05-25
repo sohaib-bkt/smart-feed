@@ -19,3 +19,4 @@ pandas
 numpy
 pytest
 implicit
+opencv-python
