@@ -1,5 +1,3 @@
-# app/services/hybrid_recommender.py (version avec diversification)
-
 import faiss
 import numpy as np
 import pandas as pd
@@ -9,6 +7,7 @@ from pathlib import Path
 from app.models.collaborative import get_cf_scores
 from app.services.recommender import get_feed_v2
 from app.services.scoring import compute_score
+from app.services.explainability import annotate_feed
 
 _index = None
 _df = None
@@ -16,8 +15,8 @@ _position_to_id = None
 _id_to_position = None
 
 # Paramètres de diversification
-MAX_PER_CATEGORY = 3  # Maximum d'articles par catégorie
-MIN_CATEGORIES = 3    # Nombre minimum de catégories à essayer d'inclure
+MAX_PER_CATEGORY = 3  
+MIN_CATEGORIES = 3    
 
 def _load():
     global _index, _df, _position_to_id, _id_to_position
@@ -201,42 +200,48 @@ def get_hybrid_feed(
             "id": str(article_id),
             "headline": headline[:200],
             "category": str(post.get("category", "General"))[:50],
+            "toxicity_score": float(post.get("toxicity_score", 0.0)),
+            "cosine_sim": round(float(sim), 4),
+            "cf_score": round(cf_score, 4),
+            "recency": round(cb_scored.get("detail", {}).get("recency", 0.5), 2),
             "score": round(hybrid_score, 6),
             "score_detail": {
                 "content_based": round(cb_score, 4),
                 "collaborative": round(cf_score, 4),
                 "cosine_sim": round(float(sim), 4)
             },
-            "explanation": _build_explanation(float(sim), cf_score, post, user_prefs)
         })
-    
+
     # Trier par score
     results.sort(key=lambda x: x["score"], reverse=True)
-    
+
     # Appliquer la diversification si demandée
     if diversify:
         results = _diversify_results(results, max_per_category)
-    
-    return results[:n_results]
+
+    feed = results[:n_results]
+    annotate_feed(feed, user_prefs, [])
+    return feed
 
 
 def _build_explanation(sim: float, cf_score: float, post: dict, prefs: dict) -> str:
+    """Kept for backward compatibility — prefer annotate_feed instead."""
     reasons = []
-    
+
     if sim > 0.6:
         reasons.append(f"très similaire à vos lectures ({sim:.0%})")
     elif sim > 0.4:
-        reasons.append("similar à vos intérêts")
-    
+        reasons.append("similaire à vos intérêts")
+
     if cf_score > 0.7:
         reasons.append("très apprécié par des lecteurs similaires")
     elif cf_score > 0.6:
         reasons.append("apprécié par des lecteurs similaires")
-    
+
     category = post.get("category", "")
     if category and category in prefs.get("interests", []):
         reasons.append(f"catégorie {category} que vous aimez")
-    
+
     if reasons:
         return "Recommandé car : " + ", ".join(reasons)
     return "Recommandé pour vous"
