@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 from app.services.scoring import compute_score
+from app.services.explainability import annotate_feed
 from app.config import settings
 
 # Charger index et métadonnées au démarrage (singleton)
@@ -86,13 +87,16 @@ def get_feed(
                 'text': post.get('text', '')[:280],
                 'category': post.get('category', ''),
                 'toxicity_score': post.get('toxicity_score', 0.0),
+                'cosine_sim': float(sim),
+                'recency': scored.get('detail', {}).get('recency', 0.5),
                 'score': scored['score'],
                 'score_detail': scored.get('detail', {}),
-                'explanation': _build_explanation(scored, post, user_prefs)
             })
-    
+
     results.sort(key=lambda x: x['score'], reverse=True)
-    return results[:n_results]
+    feed = results[:n_results]
+    annotate_feed(feed, user_prefs, [])
+    return feed
 
 
 def get_feed_v2(
@@ -140,29 +144,17 @@ def get_feed_v2(
                 'category': post.get('category', ''),
                 'toxicity_score': post.get('toxicity_score', 0.0),
                 'source': post.get('source', ''),
+                'cosine_sim': float(sim),
+                'recency': scored.get('detail', {}).get('recency', 0.5),
                 'score': scored['score'],
                 'score_detail': scored.get('detail', {}),
-                'explanation': _build_explanation(scored, post, user_prefs)
             })
 
     results.sort(key=lambda x: x['score'], reverse=True)
-    return results[:n_results]
+    feed = results[:n_results]
+    annotate_feed(feed, user_prefs, [])
+    return feed
 
-def _build_explanation(scored: dict, post: dict, prefs: dict) -> str:
-    """
-    Génère une explication lisible pour l'explicabilité du feed.
-    """
-    d = scored.get('detail', {})
-    reasons = []
-    
-    if d.get('similarity', 0) > 0.5:
-        reasons.append('correspond à tes intérêts')
-    if post.get('category') in prefs.get('interests', []):
-        reasons.append(f'catégorie {post.get("category")} favorite')
-    if d.get('recency', 0) > 0.8:
-        reasons.append('contenu récent')
-    
-    return 'Montré car : ' + ', '.join(reasons) if reasons else 'Recommandé'
 
 # -- FAISS V3 globals -----------------------------------------------
 _index_v3 = None
@@ -255,12 +247,12 @@ def get_feed_v3(
             'category': str(post.get('category', 'general')),
             'modal': modal,
             'source': str(post.get('source', 'unknown')),
+            'cosine_sim': float(score),
             'score': float(score),
             'score_detail': {
                 'similarity': float(score),
                 'modal': modal
             },
-            'explanation': f"Recommandé car : {modal} similaire à vos intérêts"
         })
     
     # Diversifier les modalités si demandé
@@ -281,5 +273,7 @@ def get_feed_v3(
         
         diversified.sort(key=lambda x: x['score'], reverse=True)
         results = diversified
-    
-    return results[:n_results]
+
+    feed = results[:n_results]
+    annotate_feed(feed, user_prefs, [])
+    return feed
