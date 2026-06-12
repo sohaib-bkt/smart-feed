@@ -31,9 +31,15 @@ client.interceptors.response.use(
 
 // Feed API 
 export const FeedAPI = {
-  getFeed: (userId: string, version: 'v1' | 'v2' | 'v3' = 'v2', limit = 20) =>
+  getFeed: (
+    userId: string,
+    version: 'v1' | 'v2' | 'v3' = 'v2',
+    limit = 20,
+    mode?: string,
+    content_type?: string,
+  ) =>
     client.get<FeedResponse>(`/feed/${userId}`, {
-      params: { version, limit },
+      params: { version, limit, mode, content_type },
     }),
 
   recordInteraction: (payload: InteractionPayload) =>

@@ -4,51 +4,84 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Switch,
   TouchableOpacity,
 } from 'react-native';
 import { usePreferences } from '../context/PreferencesContext';
 import { RecommendationMode, ContentType } from '../types';
 import { Colors, Spacing, BorderRadius, Typography, Shadows } from '../theme/theme';
 
-const MODES: { value: RecommendationMode; label: string; icon: string; desc: string }[] = [
-  { value: 'default', label: 'Standard', icon: '📰', desc: 'Recommandations équilibrées' },
-  { value: 'focus', label: 'Focus', icon: '🎯', desc: 'Contenu approfondi' },
-  { value: 'fun', label: 'Fun', icon: '🎉', desc: 'Divertissement léger' },
-  { value: 'learning', label: 'Apprentissage', icon: '📚', desc: 'Contenu éducatif' },
-  { value: 'fresh', label: 'Découverte', icon: '🆕', desc: 'Nouveautés et diversité' },
-];
+const MODE_CATEGORIES: Record<RecommendationMode, { label: string; icon: string; desc: string; categories: string[] }> = {
+  default: {
+    label: 'Standard',
+    icon: '📰',
+    desc: 'Toutes les catégories mélangées',
+    categories: ['POLITICS', 'WELLNESS', 'ENTERTAINMENT', 'TRAVEL', 'STYLE & BEAUTY', 'PARENTING', 'HEALTHY LIVING', 'QUEER VOICES', 'FOOD & DRINK', 'BUSINESS', 'COMEDY', 'SPORTS', 'BLACK VOICES', 'HOME & LIVING', 'PARENTS'],
+  },
+  focus: {
+    label: 'Focus',
+    icon: '🎯',
+    desc: 'Contenu sérieux et approfondi',
+    categories: ['POLITICS', 'BUSINESS', 'HOME & LIVING', 'BLACK VOICES', 'QUEER VOICES', 'PARENTS'],
+  },
+  fun: {
+    label: 'Fun',
+    icon: '🎉',
+    desc: 'Divertissement et détente',
+    categories: ['COMEDY', 'ENTERTAINMENT', 'SPORTS', 'FOOD & DRINK', 'TRAVEL', 'STYLE & BEAUTY'],
+  },
+  learning: {
+    label: 'Apprentissage',
+    icon: '📚',
+    desc: 'Bien-être et développement',
+    categories: ['WELLNESS', 'HEALTHY LIVING', 'PARENTING'],
+  },
+  fresh: {
+    label: 'Découverte',
+    icon: '🆕',
+    desc: 'Tout le contenu récent',
+    categories: ['POLITICS', 'WELLNESS', 'ENTERTAINMENT', 'TRAVEL', 'STYLE & BEAUTY', 'PARENTING', 'HEALTHY LIVING', 'QUEER VOICES', 'FOOD & DRINK', 'BUSINESS', 'COMEDY', 'SPORTS', 'BLACK VOICES', 'HOME & LIVING', 'PARENTS'],
+  },
+};
 
 export default function SettingsScreen() {
   const { state, updateMode, updateContentType } = usePreferences();
   const { preferences } = state;
+  const activeCategories = MODE_CATEGORIES[preferences.mode]?.categories ?? [];
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.sectionTitle}>Mode de recommandation</Text>
+      <Text style={styles.sectionTitle}>Mode de navigation</Text>
       <View style={styles.modesGrid}>
-        {MODES.map((mode) => (
-          <TouchableOpacity
-            key={mode.value}
-            style={[
-              styles.modeCard,
-              preferences.mode === mode.value && styles.modeCardActive,
-            ]}
-            onPress={() => updateMode(mode.value)}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.modeIcon}>{mode.icon}</Text>
-            <Text
+        {(Object.keys(MODE_CATEGORIES) as RecommendationMode[]).map((key) => {
+          const mode = MODE_CATEGORIES[key];
+          const isActive = preferences.mode === key;
+          return (
+            <TouchableOpacity
+              key={key}
               style={[
-                styles.modeLabel,
-                preferences.mode === mode.value && styles.modeLabelActive,
+                styles.modeCard,
+                isActive && styles.modeCardActive,
               ]}
+              onPress={() => updateMode(key)}
+              activeOpacity={0.7}
             >
-              {mode.label}
-            </Text>
-            <Text style={styles.modeDesc}>{mode.desc}</Text>
-          </TouchableOpacity>
-        ))}
+              <Text style={styles.modeIcon}>{mode.icon}</Text>
+              <Text style={[styles.modeLabel, isActive && styles.modeLabelActive]}>
+                {mode.label}
+              </Text>
+              <Text style={styles.modeDesc}>{mode.desc}</Text>
+              {isActive && (
+                <View style={styles.activeCategories}>
+                  {activeCategories.map((cat) => (
+                    <View key={cat} style={styles.activeChip}>
+                      <Text style={styles.activeChipText}>{cat}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       <Text style={styles.sectionTitle}>Type de contenu</Text>
@@ -84,6 +117,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: Spacing.lg,
+    paddingBottom: Spacing['5xl'],
   },
   sectionTitle: {
     ...Typography.h3,
@@ -122,6 +156,24 @@ const styles = StyleSheet.create({
   modeDesc: {
     ...Typography.caption,
     color: Colors.textLight,
+    marginBottom: Spacing.sm,
+  },
+  activeCategories: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginTop: Spacing.xs,
+  },
+  activeChip: {
+    backgroundColor: Colors.primary + '15',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.sm,
+  },
+  activeChipText: {
+    fontSize: 9,
+    color: Colors.primary,
+    fontWeight: '600',
   },
   chipsContainer: {
     flexDirection: 'row',

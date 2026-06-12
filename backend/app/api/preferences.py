@@ -16,7 +16,13 @@ from app.db.firebase import (
 
 router = APIRouter()
 
-VALID_MODES = ["default", "focus", "fun", "learning"]
+VALID_MODES = [
+    "default", "focus", "fun", "learning", "fresh",
+    "POLITICS", "WELLNESS", "ENTERTAINMENT", "TRAVEL",
+    "STYLE & BEAUTY", "PARENTING", "HEALTHY LIVING",
+    "QUEER VOICES", "FOOD & DRINK", "BUSINESS", "COMEDY",
+    "SPORTS", "BLACK VOICES", "HOME & LIVING", "PARENTS",
+]
 
 
 @router.get(
@@ -90,7 +96,7 @@ async def set_mode(user_id: str, mode: str):
 
     profile = await get_user_profile(user_id)
     if not profile:
-        raise HTTPException(status_code=404, detail=f"Utilisateur '{user_id}' introuvable")
+        profile = await create_user(user_id, {"mode": mode})
 
     prefs = profile.get("preferences", {})
     prefs["mode"] = mode

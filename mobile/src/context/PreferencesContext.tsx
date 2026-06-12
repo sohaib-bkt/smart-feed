@@ -90,7 +90,7 @@ const PreferencesContext = createContext<PreferencesContextValue | null>(null);
 
 export function PreferencesProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, {
-    userId: 'user_demo',
+    userId: 'sim_user_07',
     preferences: DEFAULT_PREFERENCES,
     loading: false,
     error: null,

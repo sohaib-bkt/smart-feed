@@ -12,6 +12,7 @@ import {
 import { Image } from 'expo-image';
 import { Post, InteractionAction } from '../types';
 import ExplanationBox from './ExplanationBox';
+import VideoPlayer from './VideoPlayer';
 import {
   Colors,
   Spacing,
@@ -129,7 +130,7 @@ export default function PostCard({
       {/* ── Headline ────────────────────────────────────────────── */}
       <View style={styles.content}>
         <Text style={styles.headline} numberOfLines={3}>
-          {post.headline}
+          {post.headline || post.text || ''}
         </Text>
         {post.source && (
           <Text style={styles.source}>{post.source}</Text>
@@ -137,36 +138,48 @@ export default function PostCard({
       </View>
 
       {/* ── Image (for image modality) ───────────────────────────── */}
-      {post.modal === 'image' && post.image_url && (
+      {post.modal === 'image' && (
         <View style={styles.mediaContainer}>
-          <Image
-            source={{ uri: post.image_url }}
-            style={styles.postImage}
-            contentFit="cover"
-            transition={300}
-            placeholder={Colors.surfaceElevated}
-          />
+          {post.image_url ? (
+            <Image
+              source={{ uri: post.image_url }}
+              style={styles.postImage}
+              contentFit="cover"
+              transition={300}
+              placeholder={Colors.surfaceElevated}
+            />
+          ) : (
+            <View style={styles.imagePlaceholder}>
+              <Text style={styles.mediaPlaceholderIcon}>🖼️</Text>
+              <Text style={styles.mediaPlaceholderLabel}>Contenu image</Text>
+            </View>
+          )}
         </View>
       )}
 
-      {/* ── Video placeholder (for video modality) ──────────────── */}
+      {/* ── Video (for video modality) ────────────────────────────── */}
       {post.modal === 'video' && (
-        <View style={styles.videoPlaceholder}>
-          <View style={styles.videoPlayButton}>
-            <Text style={styles.videoPlayIcon}>▶</Text>
-          </View>
-          {post.image_url && (
-            <Image
-              source={{ uri: post.image_url }}
-              style={StyleSheet.absoluteFill}
-              contentFit="cover"
-              transition={300}
-            />
+        <View style={styles.mediaContainer}>
+          {post.video_url ? (
+            <VideoPlayer uri={post.video_url} thumbnail={post.image_url} />
+          ) : (
+            <View style={styles.videoPlaceholder}>
+              {post.image_url ? (
+                <Image
+                  source={{ uri: post.image_url }}
+                  style={StyleSheet.absoluteFill}
+                  contentFit="cover"
+                  transition={300}
+                />
+              ) : (
+                <Text style={styles.mediaPlaceholderIcon}>🎬</Text>
+              )}
+              <View style={styles.videoOverlay} />
+              <View style={styles.videoPlayButtonAbsolute}>
+                <Text style={styles.videoPlayIcon}>▶</Text>
+              </View>
+            </View>
           )}
-          <View style={styles.videoOverlay} />
-          <View style={styles.videoPlayButtonAbsolute}>
-            <Text style={styles.videoPlayIcon}>▶</Text>
-          </View>
         </View>
       )}
 
@@ -354,6 +367,23 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: Colors.primary,
     marginLeft: 4,
+  },
+  imagePlaceholder: {
+    width: '100%',
+    height: 180,
+    backgroundColor: Colors.surfaceElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: BorderRadius.lg,
+  },
+  mediaPlaceholderIcon: {
+    fontSize: 36,
+    marginBottom: Spacing.sm,
+  },
+  mediaPlaceholderLabel: {
+    fontSize: 13,
+    color: Colors.textLight,
+    fontWeight: '500',
   },
   actions: {
     flexDirection: 'row',

@@ -20,7 +20,7 @@ class UserPreferences(BaseModel):
         }
     """
 
-    mode: Literal["default", "focus", "fun", "learning"] = "default"
+    mode: str = "default"
 
     interests: list[str] = Field(
         default_factory=list,
@@ -34,4 +34,4 @@ class UserPreferences(BaseModel):
         description="Seuil de filtrage toxicité (0 = strict, 1 = permissif)",
     )
 
-    content_type: Literal["all", "video", "article", "image"] = "all"
+    content_type: Literal["all", "video", "text", "image"] = "all"

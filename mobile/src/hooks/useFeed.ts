@@ -25,11 +25,13 @@ export function useFeed({ version = 'v2', limit = 20 }: UseFeedOptions = {}): Us
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const interactedPosts = useRef<Set<string>>(new Set());
+  const loadingRef = useRef(false);
 
   const loadFeed = useCallback(
     async (refresh = false) => {
-      if (loading && !refresh) return;
+      if (loadingRef.current && !refresh) return;
 
+      loadingRef.current = true;
       if (refresh) {
         setRefreshing(true);
       } else {
@@ -38,11 +40,16 @@ export function useFeed({ version = 'v2', limit = 20 }: UseFeedOptions = {}): Us
       setError(null);
 
       try {
-        const response = await FeedAPI.getFeed(prefState.userId, version, limit);
+        const response = await FeedAPI.getFeed(
+          prefState.userId,
+          version,
+          limit,
+          prefState.preferences.mode,
+          prefState.preferences.content_type,
+        );
         const newPosts = response.data.feed;
 
         setFeed(refresh ? newPosts : (prev) => {
-          // Deduplicate posts
           const existingIds = new Set(prev.map((p) => p.id));
           const fresh = newPosts.filter((p) => !existingIds.has(p.id));
           return [...prev, ...fresh];
@@ -50,11 +57,12 @@ export function useFeed({ version = 'v2', limit = 20 }: UseFeedOptions = {}): Us
       } catch (err: any) {
         setError(err.message || 'Impossible de charger le feed');
       } finally {
+        loadingRef.current = false;
         setLoading(false);
         setRefreshing(false);
       }
     },
-    [prefState.userId, version, limit, loading]
+    [prefState.userId, prefState.preferences, version, limit]
   );
 
   const handleInteraction = useCallback(

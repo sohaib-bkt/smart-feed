@@ -10,6 +10,7 @@ import {
 import { useFeed } from '../hooks/useFeed';
 import PostCard from '../components/PostCard';
 import { Post, InteractionAction } from '../types';
+import { usePreferences } from '../context/PreferencesContext';
 import { Colors, Spacing } from '../theme/theme';
 
 export default function FeedScreen() {
@@ -21,11 +22,13 @@ export default function FeedScreen() {
     loadFeed,
     handleInteraction,
     removePost,
-  } = useFeed({ version: 'v2', limit: 20 });
+  } = useFeed({ version: 'v3', limit: 20 });
+
+  const { state: prefState } = usePreferences();
 
   useEffect(() => {
-    loadFeed();
-  }, []);
+    loadFeed(true);
+  }, [prefState.preferences]);
 
   const handleLoadMore = useCallback(() => {
     if (!loading && feed.length > 0) {

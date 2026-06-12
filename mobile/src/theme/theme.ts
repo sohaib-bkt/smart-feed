@@ -111,6 +111,17 @@ export function getCategoryColor(category: string): string {
     ENTERTAINMENT: Colors.entertainment,
     HEALTH: Colors.health,
     BUSINESS: Colors.business,
+    'HEALTHY LIVING': Colors.health,
+    WELLNESS: Colors.health,
+    'STYLE & BEAUTY': '#ec4899',
+    'FOOD & DRINK': '#f59e0b',
+    TRAVEL: '#06b6d4',
+    'HOME & LIVING': '#0d9488',
+    'BLACK VOICES': '#6366f1',
+    'QUEER VOICES': '#ec4899',
+    PARENTING: '#f59e0b',
+    PARENTS: '#f59e0b',
+    COMEDY: '#f59e0b',
   };
   return map[category?.toUpperCase()] || Colors.other;
 }

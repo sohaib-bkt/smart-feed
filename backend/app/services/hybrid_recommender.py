@@ -6,6 +6,7 @@ from collections import defaultdict
 from pathlib import Path
 from app.models.collaborative import get_cf_scores
 from app.services.recommender import get_feed_v2
+from app.services.recommender import _media_url_for_text_post
 from app.services.scoring import compute_score
 from app.services.explainability import annotate_feed
 
@@ -196,11 +197,15 @@ def get_hybrid_feed(
         if not headline:
             headline = f"Article {article_id}"
         
+        category = str(post.get("category", "General"))[:50]
         results.append({
             "id": str(article_id),
             "headline": headline[:200],
-            "category": str(post.get("category", "General"))[:50],
+            "category": category,
+            "modal": "text",
             "toxicity_score": float(post.get("toxicity_score", 0.0)),
+            "image_url": _media_url_for_text_post(category),
+            "video_url": None,
             "cosine_sim": round(float(sim), 4),
             "cf_score": round(cf_score, 4),
             "recency": round(cb_scored.get("detail", {}).get("recency", 0.5), 2),
